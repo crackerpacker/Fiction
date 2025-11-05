@@ -6,7 +6,8 @@ class FictionApp {
             projects: [],
             currentProjectId: null,
             githubToken: null,
-            githubRepo: null
+            githubRepo: null,
+            claudeApiKey: null
         };
 
         this.init();
@@ -206,6 +207,8 @@ class FictionApp {
             characters: sceneData.characters || [],
             locations: sceneData.locations || [],
             customFields: sceneData.customFields || {},
+            generatedProse: sceneData.generatedProse || null,
+            proseStyle: sceneData.proseStyle || 'optionA',
             createdAt: new Date().toISOString()
         };
 
@@ -556,6 +559,7 @@ class FictionApp {
                             <button class="btn-danger btn-delete-scene" data-scene-id="${scene.id}">Delete</button>
                         </div>
                     </div>
+                    <div class="scene-beats-header">Scene Beats:</div>
                     <div class="scene-beats">${this.escapeHtml(scene.beats)}</div>
                     ${this.renderCustomFieldsDisplay(scene.customFields, 'scenes', scene.id)}
                     ${characterNames || locationNames ? `
@@ -565,6 +569,18 @@ class FictionApp {
                             ${locationNames ? `Location: ${this.escapeHtml(locationNames)}` : ''}
                         </div>
                     ` : ''}
+                    <div class="prose-section">
+                        ${scene.generatedProse ? `
+                            <div class="prose-header">Generated Prose (${scene.proseStyle === 'optionA' ? 'Option A - Spare' : 'Option C - Sensory'}):</div>
+                            <div class="generated-prose">${this.escapeHtml(scene.generatedProse)}</div>
+                            <div class="prose-actions">
+                                <button class="btn-secondary btn-small btn-regenerate-prose" data-scene-id="${scene.id}">Regenerate</button>
+                                <button class="btn-secondary btn-small btn-copy-prose" data-scene-id="${scene.id}">Copy</button>
+                            </div>
+                        ` : `
+                            <button class="btn-primary btn-generate-prose" data-scene-id="${scene.id}">✨ Generate Prose</button>
+                        `}
+                    </div>
                 </div>
             `;
         }).join('');
@@ -596,6 +612,246 @@ class FictionApp {
                 e.stopPropagation();
                 this.removeCustomFieldFromItem(e.target.dataset.entityType, e.target.dataset.entityId, e.target.dataset.fieldName);
             });
+        });
+
+        container.querySelectorAll('.btn-generate-prose').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showProseGenerationDialog(e.target.dataset.sceneId);
+            });
+        });
+
+        container.querySelectorAll('.btn-regenerate-prose').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showProseGenerationDialog(e.target.dataset.sceneId);
+            });
+        });
+
+        container.querySelectorAll('.btn-copy-prose').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.copyProseToClipboard(e.target.dataset.sceneId);
+            });
+        });
+    }
+
+    // ==================== PROSE GENERATION ====================
+
+    showProseGenerationDialog(sceneId) {
+        if (!this.data.claudeApiKey) {
+            const shouldConfigure = confirm('Claude API key not configured. Would you like to configure it now?');
+            if (shouldConfigure) {
+                this.showGitHubSettings();
+            }
+            return;
+        }
+
+        const project = this.getCurrentProject();
+        if (!project) return;
+
+        const scene = project.scenes.find(s => s.id === sceneId);
+        if (!scene) return;
+
+        this.showModal('Generate Prose', `
+            <div class="prose-generation-dialog">
+                <p>Choose the prose style for this scene:</p>
+
+                <div class="style-options">
+                    <label class="style-option">
+                        <input type="radio" name="prose-style" value="optionA" ${scene.proseStyle === 'optionA' ? 'checked' : ''}>
+                        <div class="style-description">
+                            <strong>Option A - Spare (Default)</strong>
+                            <p>Factual sentences. Trust the reader completely.</p>
+                            <em>"She read the letter twice. Then she went to the window and stood there."</em>
+                        </div>
+                    </label>
+
+                    <label class="style-option">
+                        <input type="radio" name="prose-style" value="optionC" ${scene.proseStyle === 'optionC' ? 'checked' : ''}>
+                        <div class="style-description">
+                            <strong>Option C - Sensory</strong>
+                            <p>Physical and sensory details for atmosphere. NO emotional interpretation.</p>
+                            <em>"She set the letter on the table, face down. At the window, she pressed her forehead against the cold glass."</em>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
+                    <button type="button" class="btn-primary" id="start-generation-btn">Generate</button>
+                </div>
+
+                <div id="generation-status" class="generation-status" style="display: none;">
+                    <div class="status-message">Generating prose...</div>
+                </div>
+            </div>
+        `);
+
+        document.getElementById('start-generation-btn').addEventListener('click', () => {
+            const selectedStyle = document.querySelector('input[name="prose-style"]:checked').value;
+            this.generateProse(sceneId, selectedStyle);
+        });
+    }
+
+    async generateProse(sceneId, style) {
+        const project = this.getCurrentProject();
+        if (!project) return;
+
+        const scene = project.scenes.find(s => s.id === sceneId);
+        if (!scene) return;
+
+        // Show loading state
+        const statusEl = document.getElementById('generation-status');
+        if (statusEl) {
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = '<div class="status-message">Generating prose...</div>';
+        }
+
+        // Disable generate button
+        const generateBtn = document.getElementById('start-generation-btn');
+        if (generateBtn) {
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+        }
+
+        try {
+            const prose = await this.callClaudeAPI(scene, style, project);
+
+            // Update scene with generated prose
+            scene.generatedProse = prose;
+            scene.proseStyle = style;
+            this.saveToLocalStorage();
+            this.render();
+            this.hideModal();
+            this.showMessage('Prose generated successfully');
+        } catch (error) {
+            console.error('Generation error:', error);
+            if (statusEl) {
+                statusEl.innerHTML = `<div class="status-message error">Error: ${error.message}</div>`;
+            }
+            if (generateBtn) {
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Generate';
+            }
+        }
+    }
+
+    async callClaudeAPI(scene, style, project) {
+        // Build context
+        const characterContext = scene.characters
+            .map(id => project.characters.find(c => c.id === id))
+            .filter(Boolean)
+            .map(c => `${c.name}${c.role ? ` (${c.role})` : ''}${c.physicalFacts ? `: ${c.physicalFacts}` : ''}`)
+            .join('\n');
+
+        const locationContext = scene.locations
+            .map(id => project.locations.find(l => l.id === id))
+            .filter(Boolean)
+            .map(l => `${l.name}${l.description ? `: ${l.description}` : ''}`)
+            .join('\n');
+
+        // Build system prompt with style rules
+        const systemPrompt = this.buildStyleSystemPrompt(style);
+
+        // Build user prompt
+        let userPrompt = `Write prose for this scene based on these beats:\n\n${scene.beats}`;
+
+        if (characterContext) {
+            userPrompt += `\n\nCharacters in this scene:\n${characterContext}`;
+        }
+
+        if (locationContext) {
+            userPrompt += `\n\nLocation:\n${locationContext}`;
+        }
+
+        // Call Claude API
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': this.data.claudeApiKey,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: 'claude-3-5-sonnet-20241022',
+                max_tokens: 2000,
+                temperature: 0.7,
+                system: systemPrompt,
+                messages: [{
+                    role: 'user',
+                    content: userPrompt
+                }]
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || 'API request failed');
+        }
+
+        const data = await response.json();
+        return data.content[0].text;
+    }
+
+    buildStyleSystemPrompt(style) {
+        const baseRules = `You are a fiction prose writer with a sparse, restrained style. Your job is to write prose that trusts the reader's intelligence.
+
+CRITICAL RULES - NEVER VIOLATE THESE:
+
+BANNED - Never use:
+- Emotion words (sad, angry, nervous, excited, happy, afraid, worried, etc.)
+- Adverbs ending in -ly (slowly, carefully, nervously, quietly, etc.)
+- "As if" constructions
+- Interpretive verbs (realized, understood, felt, thought, wondered, noticed, seemed)
+- Metaphors or similes
+- Explaining WHY characters do things
+- Phrases: "as if", "seemed to", "almost", "a mixture of", "sort of", "kind of"
+
+ALLOWED - Use these:
+- Simple declarative sentences
+- Physical actions (walked, opened, sat, stood, turned, etc.)
+- Concrete sensory details (temperature, texture, sound, etc.)
+- Dialogue without explanation
+- Physical reactions only (shivered, blinked, swallowed, etc.)
+
+STYLE RULES:
+- Trust the reader completely - show don't tell
+- What's unsaid matters more than what's said
+- Leave space for interpretation
+- Use restraint - less is more
+- NO emotional interpretation`;
+
+        if (style === 'optionA') {
+            return baseRules + `
+
+OPTION A - SPARE:
+Write in bare, factual sentences. Absolutely minimal description. Like Hemingway at his most sparse.
+Example: "She read the letter twice. Then she went to the window and stood there."
+
+Keep it skeletal. Actions only. Trust the reader entirely.`;
+        } else {
+            return baseRules + `
+
+OPTION C - SENSORY:
+Include physical and sensory details for atmosphere, but NO emotional interpretation.
+Example: "She set the letter on the table, face down. At the window, she pressed her forehead against the cold glass."
+
+Add sensory facts (cold, rough, dark, loud) and physical details, but never explain feelings or motivations.`;
+        }
+    }
+
+    copyProseToClipboard(sceneId) {
+        const project = this.getCurrentProject();
+        if (!project) return;
+
+        const scene = project.scenes.find(s => s.id === sceneId);
+        if (!scene || !scene.generatedProse) return;
+
+        navigator.clipboard.writeText(scene.generatedProse).then(() => {
+            this.showMessage('Prose copied to clipboard');
+        }).catch(err => {
+            this.showMessage('Failed to copy', 'error');
         });
     }
 
@@ -983,8 +1239,19 @@ class FictionApp {
     }
 
     showGitHubSettings() {
-        this.showModal('GitHub Settings', `
+        this.showModal('Settings', `
             <form id="github-settings-form">
+                <h3>Claude API (for prose generation)</h3>
+                <div class="form-group">
+                    <label for="claude-api-key">Claude API Key</label>
+                    <input type="password" id="claude-api-key" value="${this.data.claudeApiKey || ''}"
+                           placeholder="sk-ant-...">
+                    <small>Get your API key at: console.anthropic.com</small>
+                </div>
+
+                <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid #bdc3c7;">
+
+                <h3>GitHub (for data backup)</h3>
                 <div class="form-group">
                     <label for="github-token">Personal Access Token</label>
                     <input type="password" id="github-token" value="${this.data.githubToken || ''}"
@@ -1006,11 +1273,12 @@ class FictionApp {
 
         document.getElementById('github-settings-form').addEventListener('submit', (e) => {
             e.preventDefault();
+            this.data.claudeApiKey = document.getElementById('claude-api-key').value;
             this.data.githubToken = document.getElementById('github-token').value;
             this.data.githubRepo = document.getElementById('github-repo').value;
             this.saveToLocalStorage();
             this.hideModal();
-            this.showMessage('GitHub settings saved');
+            this.showMessage('Settings saved');
         });
     }
 
