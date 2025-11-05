@@ -54,6 +54,13 @@ class FictionApp {
             characters: [],
             locations: [],
             scenes: [],
+            customFields: projectData.customFields || {},
+            customFieldDefinitions: {
+                projects: [],
+                characters: [],
+                locations: [],
+                scenes: []
+            },
             createdAt: new Date().toISOString()
         };
 
@@ -106,6 +113,7 @@ class FictionApp {
             name: characterData.name,
             physicalFacts: characterData.physicalFacts || '',
             role: characterData.role || '',
+            customFields: characterData.customFields || {},
             createdAt: new Date().toISOString()
         };
 
@@ -153,6 +161,7 @@ class FictionApp {
             id: this.generateId(),
             name: locationData.name,
             description: locationData.description || '',
+            customFields: locationData.customFields || {},
             createdAt: new Date().toISOString()
         };
 
@@ -202,6 +211,7 @@ class FictionApp {
             beats: sceneData.beats || '',
             characters: sceneData.characters || [],
             locations: sceneData.locations || [],
+            customFields: sceneData.customFields || {},
             createdAt: new Date().toISOString()
         };
 
@@ -240,7 +250,57 @@ class FictionApp {
         }
     }
 
+    // ==================== CUSTOM FIELDS MANAGEMENT ====================
+
+    addCustomFieldDefinition(entityType, fieldName) {
+        const project = this.getCurrentProject();
+        if (!project) return;
+
+        if (!project.customFieldDefinitions) {
+            project.customFieldDefinitions = { projects: [], characters: [], locations: [], scenes: [] };
+        }
+
+        if (!project.customFieldDefinitions[entityType].includes(fieldName)) {
+            project.customFieldDefinitions[entityType].push(fieldName);
+            this.saveToLocalStorage();
+            this.render();
+            this.showMessage(`Custom field "${fieldName}" added`);
+        }
+    }
+
+    removeCustomFieldDefinition(entityType, fieldName) {
+        const project = this.getCurrentProject();
+        if (!project) return;
+
+        if (!project.customFieldDefinitions) return;
+
+        project.customFieldDefinitions[entityType] = project.customFieldDefinitions[entityType].filter(f => f !== fieldName);
+
+        // Remove the field from all entities of this type
+        const entities = entityType === 'projects' ? [project] : project[entityType];
+        entities.forEach(entity => {
+            if (entity.customFields && entity.customFields[fieldName]) {
+                delete entity.customFields[fieldName];
+            }
+        });
+
+        this.saveToLocalStorage();
+        this.render();
+        this.showMessage(`Custom field "${fieldName}" removed`);
+    }
+
     // ==================== UI RENDERING ====================
+
+    renderCustomFieldsDisplay(customFields) {
+        if (!customFields || Object.keys(customFields).length === 0) return '';
+
+        return Object.entries(customFields)
+            .filter(([_, value]) => value && value.trim())
+            .map(([key, value]) => `
+                <div class="meta">${this.escapeHtml(key)}: ${this.escapeHtml(value)}</div>
+            `)
+            .join('');
+    }
 
     render() {
         this.renderCurrentProject();
@@ -285,6 +345,7 @@ class FictionApp {
                     ${project.locations.length} locations •
                     ${project.scenes.length} scenes
                 </div>
+                ${this.renderCustomFieldsDisplay(project.customFields)}
                 <div class="card-actions">
                     <button class="btn-secondary btn-select-project" data-project-id="${project.id}">Select</button>
                     <button class="btn-secondary btn-edit-project" data-project-id="${project.id}">Edit</button>
@@ -339,6 +400,7 @@ class FictionApp {
                 <h3>${this.escapeHtml(character.name)}</h3>
                 ${character.role ? `<div class="meta">Role: ${this.escapeHtml(character.role)}</div>` : ''}
                 ${character.physicalFacts ? `<div class="description">${this.escapeHtml(character.physicalFacts)}</div>` : ''}
+                ${this.renderCustomFieldsDisplay(character.customFields)}
                 <div class="card-actions">
                     <button class="btn-secondary btn-edit-character" data-character-id="${character.id}">Edit</button>
                     <button class="btn-danger btn-delete-character" data-character-id="${character.id}">Delete</button>
@@ -384,6 +446,7 @@ class FictionApp {
             <div class="card">
                 <h3>${this.escapeHtml(location.name)}</h3>
                 ${location.description ? `<div class="description">${this.escapeHtml(location.description)}</div>` : ''}
+                ${this.renderCustomFieldsDisplay(location.customFields)}
                 <div class="card-actions">
                     <button class="btn-secondary btn-edit-location" data-location-id="${location.id}">Edit</button>
                     <button class="btn-danger btn-delete-location" data-location-id="${location.id}">Delete</button>
@@ -446,6 +509,7 @@ class FictionApp {
                         </div>
                     </div>
                     <div class="scene-beats">${this.escapeHtml(scene.beats)}</div>
+                    ${this.renderCustomFieldsDisplay(scene.customFields)}
                     ${characterNames || locationNames ? `
                         <div class="scene-references">
                             ${characterNames ? `Characters: ${this.escapeHtml(characterNames)}` : ''}
@@ -474,6 +538,38 @@ class FictionApp {
     }
 
     // ==================== MODAL FORMS ====================
+
+    generateCustomFieldsHTML(entityType, existingValues = {}) {
+        const project = this.getCurrentProject();
+        if (!project || !project.customFieldDefinitions) return '';
+
+        const fields = project.customFieldDefinitions[entityType] || [];
+        if (fields.length === 0) return '';
+
+        return fields.map(fieldName => `
+            <div class="form-group">
+                <label for="custom-${this.escapeHtml(fieldName)}">${this.escapeHtml(fieldName)}</label>
+                <input type="text" id="custom-${this.escapeHtml(fieldName)}" value="${this.escapeHtml(existingValues[fieldName] || '')}">
+            </div>
+        `).join('');
+    }
+
+    getCustomFieldsFromForm(entityType) {
+        const project = this.getCurrentProject();
+        if (!project || !project.customFieldDefinitions) return {};
+
+        const fields = project.customFieldDefinitions[entityType] || [];
+        const customFields = {};
+
+        fields.forEach(fieldName => {
+            const input = document.getElementById(`custom-${fieldName}`);
+            if (input && input.value.trim()) {
+                customFields[fieldName] = input.value.trim();
+            }
+        });
+
+        return customFields;
+    }
 
     showModal(title, content) {
         const modal = document.getElementById('modal');
@@ -511,6 +607,7 @@ class FictionApp {
                         <option value="complete">Complete</option>
                     </select>
                 </div>
+                ${this.generateCustomFieldsHTML('projects')}
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
                     <button type="submit" class="btn-primary">Create Project</button>
@@ -523,7 +620,8 @@ class FictionApp {
             this.createProject({
                 title: document.getElementById('project-title').value,
                 genre: document.getElementById('project-genre').value,
-                status: document.getElementById('project-status').value
+                status: document.getElementById('project-status').value,
+                customFields: this.getCustomFieldsFromForm('projects')
             });
             this.hideModal();
         });
@@ -591,6 +689,7 @@ class FictionApp {
                     <label for="character-physical">Physical Facts</label>
                     <textarea id="character-physical" placeholder="Physical description only - no emotions or psychology"></textarea>
                 </div>
+                ${this.generateCustomFieldsHTML('characters')}
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
                     <button type="submit" class="btn-primary">Add Character</button>
@@ -603,7 +702,8 @@ class FictionApp {
             this.createCharacter({
                 name: document.getElementById('character-name').value,
                 role: document.getElementById('character-role').value,
-                physicalFacts: document.getElementById('character-physical').value
+                physicalFacts: document.getElementById('character-physical').value,
+                customFields: this.getCustomFieldsFromForm('characters')
             });
             this.hideModal();
         });
@@ -665,6 +765,7 @@ class FictionApp {
                     <label for="location-description">Description</label>
                     <textarea id="location-description" placeholder="Factual description only - what you can see, hear, smell"></textarea>
                 </div>
+                ${this.generateCustomFieldsHTML('locations')}
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
                     <button type="submit" class="btn-primary">Add Location</button>
@@ -676,7 +777,8 @@ class FictionApp {
             e.preventDefault();
             this.createLocation({
                 name: document.getElementById('location-name').value,
-                description: document.getElementById('location-description').value
+                description: document.getElementById('location-description').value,
+                customFields: this.getCustomFieldsFromForm('locations')
             });
             this.hideModal();
         });
@@ -755,6 +857,7 @@ class FictionApp {
                         <small>Hold Ctrl/Cmd to select multiple</small>
                     </div>
                 ` : ''}
+                ${this.generateCustomFieldsHTML('scenes')}
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
                     <button type="submit" class="btn-primary">Add Scene</button>
@@ -776,7 +879,8 @@ class FictionApp {
             this.createScene({
                 beats: document.getElementById('scene-beats').value,
                 characters,
-                locations
+                locations,
+                customFields: this.getCustomFieldsFromForm('scenes')
             });
             this.hideModal();
         });
@@ -875,6 +979,74 @@ class FictionApp {
             this.saveToLocalStorage();
             this.hideModal();
             this.showMessage('GitHub settings saved');
+        });
+    }
+
+    showManageCustomFieldsForm(entityType) {
+        const project = this.getCurrentProject();
+        if (!project) {
+            this.showMessage('Please create a project first', 'error');
+            return;
+        }
+
+        if (!project.customFieldDefinitions) {
+            project.customFieldDefinitions = { projects: [], characters: [], locations: [], scenes: [] };
+        }
+
+        const fields = project.customFieldDefinitions[entityType] || [];
+        const entityLabel = entityType.charAt(0).toUpperCase() + entityType.slice(0, -1);
+
+        const fieldsList = fields.length > 0 ? fields.map(field => `
+            <div class="custom-field-item">
+                <span>${this.escapeHtml(field)}</span>
+                <button type="button" class="btn-danger btn-small btn-remove-field" data-field="${this.escapeHtml(field)}">Remove</button>
+            </div>
+        `).join('') : '<p class="empty-note">No custom fields defined yet</p>';
+
+        this.showModal(`Manage ${entityLabel} Custom Fields`, `
+            <div id="custom-fields-manager">
+                <p>Add custom fields to track additional information for ${entityType}.</p>
+
+                <div class="form-group">
+                    <label for="new-field-name">New Field Name</label>
+                    <input type="text" id="new-field-name" placeholder="e.g., Age, Theme, Mood">
+                </div>
+                <button type="button" class="btn-primary" id="add-field-btn">Add Field</button>
+
+                <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid #bdc3c7;">
+
+                <h3>Current Custom Fields</h3>
+                <div id="fields-list" class="custom-fields-list">
+                    ${fieldsList}
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="app.hideModal()">Done</button>
+                </div>
+            </div>
+        `);
+
+        // Add field button
+        document.getElementById('add-field-btn').addEventListener('click', () => {
+            const input = document.getElementById('new-field-name');
+            const fieldName = input.value.trim();
+
+            if (fieldName) {
+                this.addCustomFieldDefinition(entityType, fieldName);
+                input.value = '';
+                this.showManageCustomFieldsForm(entityType); // Refresh the modal
+            }
+        });
+
+        // Remove field buttons
+        document.querySelectorAll('.btn-remove-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const fieldName = e.target.dataset.field;
+                if (confirm(`Remove "${fieldName}" field? This will delete all data in this field.`)) {
+                    this.removeCustomFieldDefinition(entityType, fieldName);
+                    this.showManageCustomFieldsForm(entityType); // Refresh the modal
+                }
+            });
         });
     }
 
@@ -1007,6 +1179,23 @@ class FictionApp {
 
         document.getElementById('new-scene-btn').addEventListener('click', () => {
             this.showNewSceneForm();
+        });
+
+        // Manage custom fields buttons
+        document.getElementById('manage-project-fields-btn').addEventListener('click', () => {
+            this.showManageCustomFieldsForm('projects');
+        });
+
+        document.getElementById('manage-character-fields-btn').addEventListener('click', () => {
+            this.showManageCustomFieldsForm('characters');
+        });
+
+        document.getElementById('manage-location-fields-btn').addEventListener('click', () => {
+            this.showManageCustomFieldsForm('locations');
+        });
+
+        document.getElementById('manage-scene-fields-btn').addEventListener('click', () => {
+            this.showManageCustomFieldsForm('scenes');
         });
 
         // GitHub buttons
