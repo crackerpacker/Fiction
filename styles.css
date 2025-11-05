@@ -545,6 +545,24 @@ button {
     margin-top: 0.5rem;
 }
 
+.prose-generation-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.edit-prose-dialog textarea {
+    width: 100%;
+    min-height: 300px;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 1rem;
+    line-height: 1.8;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+}
+
 /* Prose Generation Dialog */
 .prose-generation-dialog {
     max-width: 600px;

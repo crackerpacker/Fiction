@@ -574,11 +574,16 @@ class FictionApp {
                             <div class="prose-header">Generated Prose (${scene.proseStyle === 'optionA' ? 'Option A - Spare' : 'Option C - Sensory'}):</div>
                             <div class="generated-prose">${this.escapeHtml(scene.generatedProse)}</div>
                             <div class="prose-actions">
-                                <button class="btn-secondary btn-small btn-regenerate-prose" data-scene-id="${scene.id}">Regenerate</button>
+                                <button class="btn-secondary btn-small btn-copy-prompt" data-scene-id="${scene.id}">📋 Copy Prompt</button>
+                                <button class="btn-secondary btn-small btn-edit-prose" data-scene-id="${scene.id}">Edit Prose</button>
                                 <button class="btn-secondary btn-small btn-copy-prose" data-scene-id="${scene.id}">Copy</button>
+                                ${this.data.claudeApiKey ? `<button class="btn-secondary btn-small btn-regenerate-prose" data-scene-id="${scene.id}">Regenerate</button>` : ''}
                             </div>
                         ` : `
-                            <button class="btn-primary btn-generate-prose" data-scene-id="${scene.id}">✨ Generate Prose</button>
+                            <div class="prose-generation-buttons">
+                                <button class="btn-primary btn-copy-prompt" data-scene-id="${scene.id}">📋 Copy Prompt for Claude.ai</button>
+                                ${this.data.claudeApiKey ? `<button class="btn-secondary btn-generate-prose" data-scene-id="${scene.id}">Or Generate with API</button>` : ''}
+                            </div>
                         `}
                     </div>
                 </div>
@@ -632,6 +637,20 @@ class FictionApp {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.copyProseToClipboard(e.target.dataset.sceneId);
+            });
+        });
+
+        container.querySelectorAll('.btn-copy-prompt').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.copyPromptToClipboard(e.target.dataset.sceneId);
+            });
+        });
+
+        container.querySelectorAll('.btn-edit-prose').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showEditProseDialog(e.target.dataset.sceneId);
             });
         });
     }
@@ -852,6 +871,96 @@ Add sensory facts (cold, rough, dark, loud) and physical details, but never expl
             this.showMessage('Prose copied to clipboard');
         }).catch(err => {
             this.showMessage('Failed to copy', 'error');
+        });
+    }
+
+    copyPromptToClipboard(sceneId) {
+        const project = this.getCurrentProject();
+        if (!project) return;
+
+        const scene = project.scenes.find(s => s.id === sceneId);
+        if (!scene) return;
+
+        // Ask for style if not set
+        let style = scene.proseStyle || 'optionA';
+        const styleChoice = confirm('Choose prose style:\n\nOK = Option A (Spare, minimal)\nCancel = Option C (Sensory details)');
+        style = styleChoice ? 'optionA' : 'optionC';
+
+        // Build the complete prompt
+        const prompt = this.buildCompletePrompt(scene, style, project);
+
+        // Copy to clipboard
+        navigator.clipboard.writeText(prompt).then(() => {
+            this.showMessage('Prompt copied! Paste into claude.ai');
+            // Also save the chosen style
+            scene.proseStyle = style;
+            this.saveToLocalStorage();
+        }).catch(err => {
+            this.showMessage('Failed to copy prompt', 'error');
+        });
+    }
+
+    buildCompletePrompt(scene, style, project) {
+        // Build context
+        const characterContext = scene.characters
+            .map(id => project.characters.find(c => c.id === id))
+            .filter(Boolean)
+            .map(c => `${c.name}${c.role ? ` (${c.role})` : ''}${c.physicalFacts ? `: ${c.physicalFacts}` : ''}`)
+            .join('\n');
+
+        const locationContext = scene.locations
+            .map(id => project.locations.find(l => l.id === id))
+            .filter(Boolean)
+            .map(l => `${l.name}${l.description ? `: ${l.description}` : ''}`)
+            .join('\n');
+
+        // Get system prompt
+        const systemPrompt = this.buildStyleSystemPrompt(style);
+
+        // Build user content
+        let userContent = `Write prose for this scene based on these beats:\n\n${scene.beats}`;
+
+        if (characterContext) {
+            userContent += `\n\nCharacters in this scene:\n${characterContext}`;
+        }
+
+        if (locationContext) {
+            userContent += `\n\nLocation:\n${locationContext}`;
+        }
+
+        // Combine into a single prompt
+        return `${systemPrompt}\n\n---\n\n${userContent}`;
+    }
+
+    showEditProseDialog(sceneId) {
+        const project = this.getCurrentProject();
+        if (!project) return;
+
+        const scene = project.scenes.find(s => s.id === sceneId);
+        if (!scene) return;
+
+        this.showModal('Edit Prose', `
+            <div class="edit-prose-dialog">
+                <p>Paste the prose from Claude.ai here:</p>
+                <div class="form-group">
+                    <textarea id="prose-input" rows="15">${scene.generatedProse || ''}</textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
+                    <button type="button" class="btn-primary" id="save-prose-btn">Save Prose</button>
+                </div>
+            </div>
+        `);
+
+        document.getElementById('save-prose-btn').addEventListener('click', () => {
+            const prose = document.getElementById('prose-input').value.trim();
+            if (prose) {
+                scene.generatedProse = prose;
+                this.saveToLocalStorage();
+                this.render();
+                this.hideModal();
+                this.showMessage('Prose saved');
+            }
         });
     }
 
