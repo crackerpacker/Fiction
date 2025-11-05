@@ -55,12 +55,6 @@ class FictionApp {
             locations: [],
             scenes: [],
             customFields: projectData.customFields || {},
-            customFieldDefinitions: {
-                projects: [],
-                characters: [],
-                locations: [],
-                scenes: []
-            },
             createdAt: new Date().toISOString()
         };
 
@@ -252,52 +246,60 @@ class FictionApp {
 
     // ==================== CUSTOM FIELDS MANAGEMENT ====================
 
-    addCustomFieldDefinition(entityType, fieldName) {
+    addCustomFieldToItem(entityType, entityId, fieldName, fieldValue) {
         const project = this.getCurrentProject();
         if (!project) return;
 
-        if (!project.customFieldDefinitions) {
-            project.customFieldDefinitions = { projects: [], characters: [], locations: [], scenes: [] };
+        let entity;
+        if (entityType === 'project') {
+            entity = project;
+        } else {
+            entity = project[entityType].find(e => e.id === entityId);
         }
 
-        if (!project.customFieldDefinitions[entityType].includes(fieldName)) {
-            project.customFieldDefinitions[entityType].push(fieldName);
+        if (entity) {
+            if (!entity.customFields) {
+                entity.customFields = {};
+            }
+            entity.customFields[fieldName] = fieldValue;
             this.saveToLocalStorage();
             this.render();
-            this.showMessage(`Custom field "${fieldName}" added`);
+            this.showMessage('Custom field added');
         }
     }
 
-    removeCustomFieldDefinition(entityType, fieldName) {
+    removeCustomFieldFromItem(entityType, entityId, fieldName) {
         const project = this.getCurrentProject();
         if (!project) return;
 
-        if (!project.customFieldDefinitions) return;
+        let entity;
+        if (entityType === 'project') {
+            entity = project;
+        } else {
+            entity = project[entityType].find(e => e.id === entityId);
+        }
 
-        project.customFieldDefinitions[entityType] = project.customFieldDefinitions[entityType].filter(f => f !== fieldName);
-
-        // Remove the field from all entities of this type
-        const entities = entityType === 'projects' ? [project] : project[entityType];
-        entities.forEach(entity => {
-            if (entity.customFields && entity.customFields[fieldName]) {
-                delete entity.customFields[fieldName];
-            }
-        });
-
-        this.saveToLocalStorage();
-        this.render();
-        this.showMessage(`Custom field "${fieldName}" removed`);
+        if (entity && entity.customFields) {
+            delete entity.customFields[fieldName];
+            this.saveToLocalStorage();
+            this.render();
+            this.showMessage('Custom field removed');
+        }
     }
 
     // ==================== UI RENDERING ====================
 
-    renderCustomFieldsDisplay(customFields) {
+    renderCustomFieldsDisplay(customFields, entityType, entityId) {
         if (!customFields || Object.keys(customFields).length === 0) return '';
 
         return Object.entries(customFields)
             .filter(([_, value]) => value && value.trim())
             .map(([key, value]) => `
-                <div class="meta">${this.escapeHtml(key)}: ${this.escapeHtml(value)}</div>
+                <div class="custom-field-display">
+                    <span class="custom-field-label">${this.escapeHtml(key)}:</span>
+                    <span class="custom-field-value">${this.escapeHtml(value)}</span>
+                    <button class="btn-remove-custom-field" data-entity-type="${entityType}" data-entity-id="${entityId}" data-field-name="${this.escapeHtml(key)}" title="Remove field">×</button>
+                </div>
             `)
             .join('');
     }
@@ -334,8 +336,8 @@ class FictionApp {
         }
 
         container.innerHTML = this.data.projects.map(project => `
-            <div class="card ${project.id === this.data.currentProjectId ? 'active' : ''}" data-project-id="${project.id}">
-                <h3>${this.escapeHtml(project.title)}</h3>
+            <div class="card ${project.id === this.data.currentProjectId ? 'card-selected' : ''}" data-project-id="${project.id}">
+                <h3>${this.escapeHtml(project.title)}${project.id === this.data.currentProjectId ? ' <span class="selected-badge">Active</span>' : ''}</h3>
                 <div class="meta">
                     ${project.genre ? `Genre: ${this.escapeHtml(project.genre)} • ` : ''}
                     Status: ${this.escapeHtml(project.status)}
@@ -345,10 +347,11 @@ class FictionApp {
                     ${project.locations.length} locations •
                     ${project.scenes.length} scenes
                 </div>
-                ${this.renderCustomFieldsDisplay(project.customFields)}
+                ${this.renderCustomFieldsDisplay(project.customFields, 'project', project.id)}
                 <div class="card-actions">
                     <button class="btn-secondary btn-select-project" data-project-id="${project.id}">Select</button>
                     <button class="btn-secondary btn-edit-project" data-project-id="${project.id}">Edit</button>
+                    <button class="btn-secondary btn-small btn-add-custom-field" data-entity-type="project" data-entity-id="${project.id}">+ Field</button>
                     <button class="btn-danger btn-delete-project" data-project-id="${project.id}">Delete</button>
                 </div>
             </div>
@@ -373,6 +376,20 @@ class FictionApp {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.deleteProject(e.target.dataset.projectId);
+            });
+        });
+
+        container.querySelectorAll('.btn-add-custom-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showAddCustomFieldDialog(e.target.dataset.entityType, e.target.dataset.entityId);
+            });
+        });
+
+        container.querySelectorAll('.btn-remove-custom-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.removeCustomFieldFromItem(e.target.dataset.entityType, e.target.dataset.entityId, e.target.dataset.fieldName);
             });
         });
     }
@@ -400,9 +417,10 @@ class FictionApp {
                 <h3>${this.escapeHtml(character.name)}</h3>
                 ${character.role ? `<div class="meta">Role: ${this.escapeHtml(character.role)}</div>` : ''}
                 ${character.physicalFacts ? `<div class="description">${this.escapeHtml(character.physicalFacts)}</div>` : ''}
-                ${this.renderCustomFieldsDisplay(character.customFields)}
+                ${this.renderCustomFieldsDisplay(character.customFields, 'characters', character.id)}
                 <div class="card-actions">
                     <button class="btn-secondary btn-edit-character" data-character-id="${character.id}">Edit</button>
+                    <button class="btn-secondary btn-small btn-add-custom-field" data-entity-type="characters" data-entity-id="${character.id}">+ Field</button>
                     <button class="btn-danger btn-delete-character" data-character-id="${character.id}">Delete</button>
                 </div>
             </div>
@@ -420,6 +438,20 @@ class FictionApp {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.deleteCharacter(e.target.dataset.characterId);
+            });
+        });
+
+        container.querySelectorAll('.btn-add-custom-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showAddCustomFieldDialog(e.target.dataset.entityType, e.target.dataset.entityId);
+            });
+        });
+
+        container.querySelectorAll('.btn-remove-custom-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.removeCustomFieldFromItem(e.target.dataset.entityType, e.target.dataset.entityId, e.target.dataset.fieldName);
             });
         });
     }
@@ -446,9 +478,10 @@ class FictionApp {
             <div class="card">
                 <h3>${this.escapeHtml(location.name)}</h3>
                 ${location.description ? `<div class="description">${this.escapeHtml(location.description)}</div>` : ''}
-                ${this.renderCustomFieldsDisplay(location.customFields)}
+                ${this.renderCustomFieldsDisplay(location.customFields, 'locations', location.id)}
                 <div class="card-actions">
                     <button class="btn-secondary btn-edit-location" data-location-id="${location.id}">Edit</button>
+                    <button class="btn-secondary btn-small btn-add-custom-field" data-entity-type="locations" data-entity-id="${location.id}">+ Field</button>
                     <button class="btn-danger btn-delete-location" data-location-id="${location.id}">Delete</button>
                 </div>
             </div>
@@ -466,6 +499,20 @@ class FictionApp {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.deleteLocation(e.target.dataset.locationId);
+            });
+        });
+
+        container.querySelectorAll('.btn-add-custom-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showAddCustomFieldDialog(e.target.dataset.entityType, e.target.dataset.entityId);
+            });
+        });
+
+        container.querySelectorAll('.btn-remove-custom-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.removeCustomFieldFromItem(e.target.dataset.entityType, e.target.dataset.entityId, e.target.dataset.fieldName);
             });
         });
     }
@@ -505,11 +552,12 @@ class FictionApp {
                         <div class="scene-number">Scene ${scene.number}</div>
                         <div>
                             <button class="btn-secondary btn-edit-scene" data-scene-id="${scene.id}">Edit</button>
+                            <button class="btn-secondary btn-small btn-add-custom-field" data-entity-type="scenes" data-entity-id="${scene.id}">+ Field</button>
                             <button class="btn-danger btn-delete-scene" data-scene-id="${scene.id}">Delete</button>
                         </div>
                     </div>
                     <div class="scene-beats">${this.escapeHtml(scene.beats)}</div>
-                    ${this.renderCustomFieldsDisplay(scene.customFields)}
+                    ${this.renderCustomFieldsDisplay(scene.customFields, 'scenes', scene.id)}
                     ${characterNames || locationNames ? `
                         <div class="scene-references">
                             ${characterNames ? `Characters: ${this.escapeHtml(characterNames)}` : ''}
@@ -535,40 +583,32 @@ class FictionApp {
                 this.deleteScene(e.target.dataset.sceneId);
             });
         });
+
+        container.querySelectorAll('.btn-add-custom-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showAddCustomFieldDialog(e.target.dataset.entityType, e.target.dataset.entityId);
+            });
+        });
+
+        container.querySelectorAll('.btn-remove-custom-field').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.removeCustomFieldFromItem(e.target.dataset.entityType, e.target.dataset.entityId, e.target.dataset.fieldName);
+            });
+        });
     }
 
     // ==================== MODAL FORMS ====================
 
-    generateCustomFieldsHTML(entityType, existingValues = {}) {
-        const project = this.getCurrentProject();
-        if (!project || !project.customFieldDefinitions) return '';
+    showAddCustomFieldDialog(entityType, entityId) {
+        const fieldName = prompt('Field name (e.g., Age, Mood, Theme):');
+        if (!fieldName || !fieldName.trim()) return;
 
-        const fields = project.customFieldDefinitions[entityType] || [];
-        if (fields.length === 0) return '';
+        const fieldValue = prompt(`Value for "${fieldName}":`);
+        if (fieldValue === null) return; // User cancelled
 
-        return fields.map(fieldName => `
-            <div class="form-group">
-                <label for="custom-${this.escapeHtml(fieldName)}">${this.escapeHtml(fieldName)}</label>
-                <input type="text" id="custom-${this.escapeHtml(fieldName)}" value="${this.escapeHtml(existingValues[fieldName] || '')}">
-            </div>
-        `).join('');
-    }
-
-    getCustomFieldsFromForm(entityType) {
-        const project = this.getCurrentProject();
-        if (!project || !project.customFieldDefinitions) return {};
-
-        const fields = project.customFieldDefinitions[entityType] || [];
-        const customFields = {};
-
-        fields.forEach(fieldName => {
-            const input = document.getElementById(`custom-${fieldName}`);
-            if (input && input.value.trim()) {
-                customFields[fieldName] = input.value.trim();
-            }
-        });
-
-        return customFields;
+        this.addCustomFieldToItem(entityType, entityId, fieldName.trim(), fieldValue.trim());
     }
 
     showModal(title, content) {
@@ -607,7 +647,6 @@ class FictionApp {
                         <option value="complete">Complete</option>
                     </select>
                 </div>
-                ${this.generateCustomFieldsHTML('projects')}
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
                     <button type="submit" class="btn-primary">Create Project</button>
@@ -620,8 +659,7 @@ class FictionApp {
             this.createProject({
                 title: document.getElementById('project-title').value,
                 genre: document.getElementById('project-genre').value,
-                status: document.getElementById('project-status').value,
-                customFields: this.getCustomFieldsFromForm('projects')
+                status: document.getElementById('project-status').value
             });
             this.hideModal();
         });
@@ -689,7 +727,6 @@ class FictionApp {
                     <label for="character-physical">Physical Facts</label>
                     <textarea id="character-physical" placeholder="Physical description only - no emotions or psychology"></textarea>
                 </div>
-                ${this.generateCustomFieldsHTML('characters')}
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
                     <button type="submit" class="btn-primary">Add Character</button>
@@ -702,8 +739,7 @@ class FictionApp {
             this.createCharacter({
                 name: document.getElementById('character-name').value,
                 role: document.getElementById('character-role').value,
-                physicalFacts: document.getElementById('character-physical').value,
-                customFields: this.getCustomFieldsFromForm('characters')
+                physicalFacts: document.getElementById('character-physical').value
             });
             this.hideModal();
         });
@@ -765,7 +801,6 @@ class FictionApp {
                     <label for="location-description">Description</label>
                     <textarea id="location-description" placeholder="Factual description only - what you can see, hear, smell"></textarea>
                 </div>
-                ${this.generateCustomFieldsHTML('locations')}
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
                     <button type="submit" class="btn-primary">Add Location</button>
@@ -777,8 +812,7 @@ class FictionApp {
             e.preventDefault();
             this.createLocation({
                 name: document.getElementById('location-name').value,
-                description: document.getElementById('location-description').value,
-                customFields: this.getCustomFieldsFromForm('locations')
+                description: document.getElementById('location-description').value
             });
             this.hideModal();
         });
@@ -857,7 +891,6 @@ class FictionApp {
                         <small>Hold Ctrl/Cmd to select multiple</small>
                     </div>
                 ` : ''}
-                ${this.generateCustomFieldsHTML('scenes')}
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="app.hideModal()">Cancel</button>
                     <button type="submit" class="btn-primary">Add Scene</button>
@@ -879,8 +912,7 @@ class FictionApp {
             this.createScene({
                 beats: document.getElementById('scene-beats').value,
                 characters,
-                locations,
-                customFields: this.getCustomFieldsFromForm('scenes')
+                locations
             });
             this.hideModal();
         });
@@ -979,74 +1011,6 @@ class FictionApp {
             this.saveToLocalStorage();
             this.hideModal();
             this.showMessage('GitHub settings saved');
-        });
-    }
-
-    showManageCustomFieldsForm(entityType) {
-        const project = this.getCurrentProject();
-        if (!project) {
-            this.showMessage('Please create a project first', 'error');
-            return;
-        }
-
-        if (!project.customFieldDefinitions) {
-            project.customFieldDefinitions = { projects: [], characters: [], locations: [], scenes: [] };
-        }
-
-        const fields = project.customFieldDefinitions[entityType] || [];
-        const entityLabel = entityType.charAt(0).toUpperCase() + entityType.slice(0, -1);
-
-        const fieldsList = fields.length > 0 ? fields.map(field => `
-            <div class="custom-field-item">
-                <span>${this.escapeHtml(field)}</span>
-                <button type="button" class="btn-danger btn-small btn-remove-field" data-field="${this.escapeHtml(field)}">Remove</button>
-            </div>
-        `).join('') : '<p class="empty-note">No custom fields defined yet</p>';
-
-        this.showModal(`Manage ${entityLabel} Custom Fields`, `
-            <div id="custom-fields-manager">
-                <p>Add custom fields to track additional information for ${entityType}.</p>
-
-                <div class="form-group">
-                    <label for="new-field-name">New Field Name</label>
-                    <input type="text" id="new-field-name" placeholder="e.g., Age, Theme, Mood">
-                </div>
-                <button type="button" class="btn-primary" id="add-field-btn">Add Field</button>
-
-                <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid #bdc3c7;">
-
-                <h3>Current Custom Fields</h3>
-                <div id="fields-list" class="custom-fields-list">
-                    ${fieldsList}
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary" onclick="app.hideModal()">Done</button>
-                </div>
-            </div>
-        `);
-
-        // Add field button
-        document.getElementById('add-field-btn').addEventListener('click', () => {
-            const input = document.getElementById('new-field-name');
-            const fieldName = input.value.trim();
-
-            if (fieldName) {
-                this.addCustomFieldDefinition(entityType, fieldName);
-                input.value = '';
-                this.showManageCustomFieldsForm(entityType); // Refresh the modal
-            }
-        });
-
-        // Remove field buttons
-        document.querySelectorAll('.btn-remove-field').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const fieldName = e.target.dataset.field;
-                if (confirm(`Remove "${fieldName}" field? This will delete all data in this field.`)) {
-                    this.removeCustomFieldDefinition(entityType, fieldName);
-                    this.showManageCustomFieldsForm(entityType); // Refresh the modal
-                }
-            });
         });
     }
 
@@ -1179,23 +1143,6 @@ class FictionApp {
 
         document.getElementById('new-scene-btn').addEventListener('click', () => {
             this.showNewSceneForm();
-        });
-
-        // Manage custom fields buttons
-        document.getElementById('manage-project-fields-btn').addEventListener('click', () => {
-            this.showManageCustomFieldsForm('projects');
-        });
-
-        document.getElementById('manage-character-fields-btn').addEventListener('click', () => {
-            this.showManageCustomFieldsForm('characters');
-        });
-
-        document.getElementById('manage-location-fields-btn').addEventListener('click', () => {
-            this.showManageCustomFieldsForm('locations');
-        });
-
-        document.getElementById('manage-scene-fields-btn').addEventListener('click', () => {
-            this.showManageCustomFieldsForm('scenes');
         });
 
         // GitHub buttons
