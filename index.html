@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Fiction Writing Machine</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header>
+            <h1>Fiction Writing Machine</h1>
+            <div id="current-project-name"></div>
+        </header>
+
+        <!-- Main Navigation -->
+        <nav id="main-nav">
+            <button class="nav-btn active" data-view="projects">Projects</button>
+            <button class="nav-btn" data-view="characters">Characters</button>
+            <button class="nav-btn" data-view="locations">Locations</button>
+            <button class="nav-btn" data-view="scenes">Scenes</button>
+        </nav>
+
+        <!-- Content Area -->
+        <main id="content">
+
+            <!-- Projects View -->
+            <div id="projects-view" class="view active">
+                <div class="view-header">
+                    <h2>Novel Projects</h2>
+                    <button class="btn-primary" id="new-project-btn">+ New Project</button>
+                </div>
+                <div id="projects-list" class="card-list"></div>
+            </div>
+
+            <!-- Characters View -->
+            <div id="characters-view" class="view">
+                <div class="view-header">
+                    <h2>Characters</h2>
+                    <button class="btn-primary" id="new-character-btn">+ New Character</button>
+                </div>
+                <div id="characters-list" class="card-list"></div>
+            </div>
+
+            <!-- Locations View -->
+            <div id="locations-view" class="view">
+                <div class="view-header">
+                    <h2>Locations</h2>
+                    <button class="btn-primary" id="new-location-btn">+ New Location</button>
+                </div>
+                <div id="locations-list" class="card-list"></div>
+            </div>
+
+            <!-- Scenes View -->
+            <div id="scenes-view" class="view">
+                <div class="view-header">
+                    <h2>Scenes</h2>
+                    <button class="btn-primary" id="new-scene-btn">+ New Scene</button>
+                </div>
+                <div id="scenes-list" class="scene-list"></div>
+            </div>
+
+        </main>
+
+        <!-- Modal for Forms -->
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                <span class="modal-close">&times;</span>
+                <div id="modal-body"></div>
+            </div>
+        </div>
+
+        <!-- GitHub Sync Section -->
+        <div id="github-sync">
+            <button id="github-save-btn" class="btn-secondary">Save to GitHub</button>
+            <button id="github-load-btn" class="btn-secondary">Load from GitHub</button>
+            <button id="github-settings-btn" class="btn-icon">⚙️</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
