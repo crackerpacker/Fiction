@@ -286,12 +286,34 @@ class FictionApp {
                     ${project.scenes.length} scenes
                 </div>
                 <div class="card-actions">
-                    <button class="btn-secondary" onclick="app.selectProject('${project.id}')">Select</button>
-                    <button class="btn-secondary" onclick="app.showEditProjectForm('${project.id}')">Edit</button>
-                    <button class="btn-danger" onclick="app.deleteProject('${project.id}')">Delete</button>
+                    <button class="btn-secondary btn-select-project" data-project-id="${project.id}">Select</button>
+                    <button class="btn-secondary btn-edit-project" data-project-id="${project.id}">Edit</button>
+                    <button class="btn-danger btn-delete-project" data-project-id="${project.id}">Delete</button>
                 </div>
             </div>
         `).join('');
+
+        // Add event listeners for project action buttons
+        container.querySelectorAll('.btn-select-project').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.selectProject(e.target.dataset.projectId);
+            });
+        });
+
+        container.querySelectorAll('.btn-edit-project').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showEditProjectForm(e.target.dataset.projectId);
+            });
+        });
+
+        container.querySelectorAll('.btn-delete-project').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteProject(e.target.dataset.projectId);
+            });
+        });
     }
 
     renderCharacters() {
@@ -318,11 +340,26 @@ class FictionApp {
                 ${character.role ? `<div class="meta">Role: ${this.escapeHtml(character.role)}</div>` : ''}
                 ${character.physicalFacts ? `<div class="description">${this.escapeHtml(character.physicalFacts)}</div>` : ''}
                 <div class="card-actions">
-                    <button class="btn-secondary" onclick="app.showEditCharacterForm('${character.id}')">Edit</button>
-                    <button class="btn-danger" onclick="app.deleteCharacter('${character.id}')">Delete</button>
+                    <button class="btn-secondary btn-edit-character" data-character-id="${character.id}">Edit</button>
+                    <button class="btn-danger btn-delete-character" data-character-id="${character.id}">Delete</button>
                 </div>
             </div>
         `).join('');
+
+        // Add event listeners for character action buttons
+        container.querySelectorAll('.btn-edit-character').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showEditCharacterForm(e.target.dataset.characterId);
+            });
+        });
+
+        container.querySelectorAll('.btn-delete-character').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteCharacter(e.target.dataset.characterId);
+            });
+        });
     }
 
     renderLocations() {
@@ -348,11 +385,26 @@ class FictionApp {
                 <h3>${this.escapeHtml(location.name)}</h3>
                 ${location.description ? `<div class="description">${this.escapeHtml(location.description)}</div>` : ''}
                 <div class="card-actions">
-                    <button class="btn-secondary" onclick="app.showEditLocationForm('${location.id}')">Edit</button>
-                    <button class="btn-danger" onclick="app.deleteLocation('${location.id}')">Delete</button>
+                    <button class="btn-secondary btn-edit-location" data-location-id="${location.id}">Edit</button>
+                    <button class="btn-danger btn-delete-location" data-location-id="${location.id}">Delete</button>
                 </div>
             </div>
         `).join('');
+
+        // Add event listeners for location action buttons
+        container.querySelectorAll('.btn-edit-location').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showEditLocationForm(e.target.dataset.locationId);
+            });
+        });
+
+        container.querySelectorAll('.btn-delete-location').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteLocation(e.target.dataset.locationId);
+            });
+        });
     }
 
     renderScenes() {
@@ -389,8 +441,8 @@ class FictionApp {
                     <div class="scene-header">
                         <div class="scene-number">Scene ${scene.number}</div>
                         <div>
-                            <button class="btn-secondary" onclick="app.showEditSceneForm('${scene.id}')">Edit</button>
-                            <button class="btn-danger" onclick="app.deleteScene('${scene.id}')">Delete</button>
+                            <button class="btn-secondary btn-edit-scene" data-scene-id="${scene.id}">Edit</button>
+                            <button class="btn-danger btn-delete-scene" data-scene-id="${scene.id}">Delete</button>
                         </div>
                     </div>
                     <div class="scene-beats">${this.escapeHtml(scene.beats)}</div>
@@ -404,6 +456,21 @@ class FictionApp {
                 </div>
             `;
         }).join('');
+
+        // Add event listeners for scene action buttons
+        container.querySelectorAll('.btn-edit-scene').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showEditSceneForm(e.target.dataset.sceneId);
+            });
+        });
+
+        container.querySelectorAll('.btn-delete-scene').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteScene(e.target.dataset.sceneId);
+            });
+        });
     }
 
     // ==================== MODAL FORMS ====================
